@@ -11,9 +11,9 @@ jobs:
         run: brew install xcodegen
       - name: Secretos
         env:
-          K: ${{ secrets.ANTHROPIC_API_KEY }}
+          K: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          printf 'enum Secrets { static let anthropic = "%s" }\n' "$K" > Sources/Secrets.swift
+          printf 'enum Secrets { static let gemini = "%s" }\n' "$K" > Sources/Secrets.swift
       - name: Proyecto
         run: xcodegen generate
       - name: Compilar

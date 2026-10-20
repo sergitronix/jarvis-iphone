@@ -9,7 +9,7 @@ final class Brain: ObservableObject {
     @Published var chat: [Linea] = []
     @Published var pensando = false
     var historial: [[String: Any]] = []
-    let modelo = "claude-sonnet-5-5"
+    let modelo = "gemini-3.8-flash"
 
     var memoria: [String] {
         get { UserDefaults.standard.stringArray(forKey: "memoria") ?? [] }
@@ -23,37 +23,37 @@ final class Brain: ObservableObject {
         return s
     }
 
-    func herramientas(busqueda: Bool) -> [[String: Any]] {
-        var t: [[String: Any]] = [
+    func herramientas() -> [[String: Any]] {
+        [["functionDeclarations": [
             ["name": "abrir_url", "description": "Abre una URL o esquema de app en el iPhone (https, youtube, spotify, tel, sms, maps, shortcuts).",
-             "input_schema": ["type": "object", "properties": ["url": ["type": "string"]], "required": ["url"]]],
+             "parameters": ["type": "OBJECT", "properties": ["url": ["type": "STRING"]], "required": ["url"]]],
             ["name": "recordatorio", "description": "Programa una notificación local de recordatorio.",
-             "input_schema": ["type": "object", "properties": ["mensaje": ["type": "string"], "en_minutos": ["type": "number"]], "required": ["mensaje", "en_minutos"]]],
+             "parameters": ["type": "OBJECT", "properties": ["mensaje": ["type": "STRING"], "en_minutos": ["type": "NUMBER"]], "required": ["mensaje", "en_minutos"]]],
             ["name": "recordar", "description": "Guarda un dato de Sergio en la memoria de largo plazo.",
-             "input_schema": ["type": "object", "properties": ["texto": ["type": "string"]], "required": ["texto"]]],
-            ["name": "olvidar_todo", "description": "Borra toda la memoria de largo plazo.",
-             "input_schema": ["type": "object", "properties": [:]]]
-        ]
-        if busqueda { t.append(["type": "web_search_20250305", "name": "web_search", "max_uses": 3]) }
-        return t
+             "parameters": ["type": "OBJECT", "properties": ["texto": ["type": "STRING"]], "required": ["texto"]]],
+            ["name": "olvidar_todo", "description": "Borra toda la memoria de largo plazo."]
+        ]]]
     }
 
-    func post(_ msgs: [[String: Any]], busqueda: Bool) async throws -> [String: Any] {
-        var r = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
-        r.httpMethod = "POST"
-        r.timeoutInterval = 90
-        r.setValue(Secrets.anthropic, forHTTPHeaderField: "x-api-key")
-        r.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-        r.setValue("application/json", forHTTPHeaderField: "content-type")
-        let body: [String: Any] = ["model": modelo, "max_tokens": 1024, "system": sistema(), "tools": herramientas(busqueda: busqueda), "messages": msgs]
-        r.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (d, resp) = try await URLSession.shared.data(for: r)
-        let j = (try JSONSerialization.jsonObject(with: d) as? [String: Any]) ?? [:]
-        if let h = resp as? HTTPURLResponse, h.statusCode >= 400 {
-            let m = ((j["error"] as? [String: Any])?["message"] as? String) ?? "error \(h.statusCode)"
-            throw NSError(domain: "api", code: h.statusCode, userInfo: [NSLocalizedDescriptionKey: m])
+    func post(_ contenido: [[String: Any]]) async throws -> [String: Any] {
+        var url = URLRequest(url: URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(modelo):generateContent")!)
+        url.httpMethod = "POST"
+        url.timeoutInterval = 90
+        url.setValue(Secrets.gemini, forHTTPHeaderField: "x-goog-api-key")
+        url.setValue("application/json", forHTTPHeaderField: "content-type")
+        let body: [String: Any] = ["systemInstruction": ["parts": [["text": sistema()]]], "contents": contenido, "tools": herramientas()]
+        url.httpBody = try JSONSerialization.data(withJSONObject: body)
+        var ultimo = "sin respuesta"
+        for intento in 0..<4 {
+            let (d, resp) = try await URLSession.shared.data(for: url)
+            let j = (try JSONSerialization.jsonObject(with: d) as? [String: Any]) ?? [:]
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            if code < 400 { return j }
+            ultimo = ((j["error"] as? [String: Any])?["message"] as? String) ?? "error \(code)"
+            if code == 429 || code == 503 || code == 500 { try? await Task.sleep(nanoseconds: UInt64(1_500_000_000 * (intento + 1))); continue }
+            break
         }
-        return j
+        throw NSError(domain: "api", code: 1, userInfo: [NSLocalizedDescriptionKey: ultimo])
     }
 
     func ejecutar(_ nombre: String, _ inp: [String: Any]) async -> String {
@@ -85,36 +85,33 @@ final class Brain: ObservableObject {
         pensando = true
         defer { pensando = false }
         var trabajo = historial
-        trabajo.append(["role": "user", "content": texto])
-        var busqueda = true
+        trabajo.append(["role": "user", "parts": [["text": texto]]])
         var final = ""
         do {
             for _ in 0..<6 {
-                let j: [String: Any]
-                do { j = try await post(trabajo, busqueda: busqueda) }
-                catch let e as NSError where busqueda && e.code == 400 { busqueda = false; j = try await post(trabajo, busqueda: false) }
-                let c = (j["content"] as? [[String: Any]]) ?? []
-                trabajo.append(["role": "assistant", "content": c])
-                let usos = c.filter { ($0["type"] as? String) == "tool_use" }
-                let txt = c.compactMap { ($0["type"] as? String) == "text" ? $0["text"] as? String : nil }.joined(separator: " ")
-                if usos.isEmpty {
-                    if (j["stop_reason"] as? String) == "pause_turn" { continue }
-                    final = txt; break
+                let j = try await post(trabajo)
+                guard let cand = (j["candidates"] as? [[String: Any]])?.first,
+                      let cont = cand["content"] as? [String: Any],
+                      let partes = cont["parts"] as? [[String: Any]] else { final = "No obtuve respuesta."; break }
+                trabajo.append(["role": "model", "parts": partes])
+                let txt = partes.compactMap { $0["text"] as? String }.joined(separator: " ")
+                let llamadas = partes.compactMap { $0["functionCall"] as? [String: Any] }
+                if llamadas.isEmpty { final = txt; break }
+                var resp: [[String: Any]] = []
+                for c in llamadas {
+                    let n = c["name"] as? String ?? ""
+                    let r = await ejecutar(n, (c["args"] as? [String: Any]) ?? [:])
+                    resp.append(["functionResponse": ["name": n, "response": ["result": r]]])
                 }
-                var res: [[String: Any]] = []
-                for u in usos {
-                    let r = await ejecutar(u["name"] as? String ?? "", (u["input"] as? [String: Any]) ?? [:])
-                    res.append(["type": "tool_result", "tool_use_id": u["id"] as? String ?? "", "content": r])
-                }
-                trabajo.append(["role": "user", "content": res])
+                trabajo.append(["role": "user", "parts": resp])
                 final = txt
             }
         } catch {
             return "Error: " + error.localizedDescription
         }
         if final.isEmpty { final = "Hecho." }
-        historial.append(["role": "user", "content": texto])
-        historial.append(["role": "assistant", "content": final])
+        historial.append(["role": "user", "parts": [["text": texto]]])
+        historial.append(["role": "model", "parts": [["text": final]]])
         if historial.count > 24 { historial.removeFirst(historial.count - 24) }
         return final
     }
