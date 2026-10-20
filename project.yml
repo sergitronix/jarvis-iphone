@@ -1,0 +1,22 @@
+name: Jarvis
+options:
+  bundleIdPrefix: com.sergio
+targets:
+  Jarvis:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources: [Sources]
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: Jarvis
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSMicrophoneUsageDescription: Jarvis necesita el micrófono para escucharte.
+        NSSpeechRecognitionUsageDescription: Jarvis usa el reconocimiento de voz para entenderte.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.sergio.jarvisphone
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
