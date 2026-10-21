@@ -1,9 +1,10 @@
 {
- "prompt_extra": "",
+ "prompt_extra": "Para cómo llegar a un sitio usa siempre la habilidad de Google Maps con el destino. Para el tiempo o el clima usa la habilidad del tiempo con la ciudad (si no la dice, pregunta o usa la última mencionada). Cuando abras algo, dilo en una frase corta.",
  "sugerencias": [
-  "Pon un vídeo de gatos en YouTube",
-  "Recuérdame en 10 minutos beber agua",
-  "Llévame a casa en Maps"
+  "Qué tiempo hace hoy",
+  "Cómo llego a la estación",
+  "Pon música de Bad Bunny en Spotify",
+  "Recuérdame en 10 minutos beber agua"
  ],
  "habilidades": [
   {
@@ -15,6 +16,86 @@
    "nombre": "traducir",
    "descripcion": "Traduce un texto al inglés con Google Translate",
    "plantilla": "https://translate.google.com/?sl=auto&tl=en&text={q}&op=translate"
+  },
+  {
+   "nombre": "google maps",
+   "descripcion": "Cómo llegar a un destino o buscar un lugar en Google Maps; q es el destino",
+   "plantilla": "https://www.google.com/maps/dir/?api=1&destination={q}"
+  },
+  {
+   "nombre": "tiempo",
+   "descripcion": "Ver el tiempo y la previsión de una ciudad; q es la ciudad",
+   "plantilla": "https://www.google.com/search?q=tiempo+en+{q}"
+  },
+  {
+   "nombre": "youtube",
+   "descripcion": "Buscar vídeos en YouTube",
+   "plantilla": "https://www.youtube.com/results?search_query={q}"
+  },
+  {
+   "nombre": "spotify",
+   "descripcion": "Buscar música en Spotify",
+   "plantilla": "spotify:search:{q}"
+  },
+  {
+   "nombre": "whatsapp",
+   "descripcion": "Abrir WhatsApp con un mensaje escrito para elegir contacto",
+   "plantilla": "https://wa.me/?text={q}"
+  },
+  {
+   "nombre": "noticias",
+   "descripcion": "Buscar noticias recientes sobre un tema",
+   "plantilla": "https://news.google.com/search?q={q}"
+  },
+  {
+   "nombre": "wikipedia",
+   "descripcion": "Buscar en Wikipedia en español",
+   "plantilla": "https://es.wikipedia.org/w/index.php?search={q}"
+  },
+  {
+   "nombre": "comprar en amazon",
+   "descripcion": "Buscar un producto en Amazon España",
+   "plantilla": "https://www.amazon.es/s?k={q}"
+  },
+  {
+   "nombre": "atajo",
+   "descripcion": "Ejecutar un atajo de la app Atajos por su nombre",
+   "plantilla": "shortcuts://run-workflow?name={q}"
+  },
+  {
+   "nombre": "llamar",
+   "descripcion": "Llamar a un número de teléfono",
+   "plantilla": "tel:{q}"
+  },
+  {
+   "nombre": "mensaje",
+   "descripcion": "Escribir un SMS; q es el texto",
+   "plantilla": "sms:&body={q}"
+  },
+  {
+   "nombre": "correo",
+   "descripcion": "Redactar un correo; q es el asunto o cuerpo",
+   "plantilla": "mailto:?subject={q}"
+  },
+  {
+   "nombre": "divisas",
+   "descripcion": "Convertir monedas o cantidades, por ejemplo 100 dólares a euros",
+   "plantilla": "https://www.google.com/search?q={q}"
+  },
+  {
+   "nombre": "calendario",
+   "descripcion": "Abrir la app Calendario",
+   "plantilla": "calshow://"
+  },
+  {
+   "nombre": "fotos",
+   "descripcion": "Abrir la app Fotos",
+   "plantilla": "photos-redirect://"
+  },
+  {
+   "nombre": "ajustes",
+   "descripcion": "Abrir los ajustes del iPhone",
+   "plantilla": "app-settings:"
   }
  ]
 }
