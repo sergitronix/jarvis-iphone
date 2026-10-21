@@ -2,7 +2,9 @@ import Foundation
 import AVFoundation
 import Speech
 
-final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
+final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegate {
+    var player: AVAudioPlayer?
+    var gen = 0
     let synth = AVSpeechSynthesizer()
     let engine = AVAudioEngine()
     var req: SFSpeechAudioBufferRecognitionRequest?
@@ -23,7 +25,7 @@ final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
 
     func escuchar() {
         if oyendo { terminar(); return }
-        synth.stopSpeaking(at: .immediate)
+        gen += 1; player?.stop(); hablando = false; synth.stopSpeaking(at: .immediate)
         let s = AVAudioSession.sharedInstance()
         try? s.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
         try? s.setActive(true)
@@ -71,14 +73,31 @@ final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     }
 
     func hablar(_ texto: String) {
-        let u = AVSpeechUtterance(string: texto)
-        u.voice = AVSpeechSynthesisVoice(language: "es-MX") ?? AVSpeechSynthesisVoice(language: "es-ES")
-        u.rate = 0.5
+        gen += 1
+        let mi = gen
         hablando = true
-        synth.speak(u)
+        let s = AVAudioSession.sharedInstance()
+        try? s.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
+        try? s.setActive(true)
+        Task { @MainActor in
+            let data = await EdgeTTS.sintetizar(texto)
+            guard mi == self.gen else { return }
+            if let data = data, let p = try? AVAudioPlayer(data: data) {
+                self.player = p
+                p.delegate = self
+                p.play()
+            } else {
+                let u = AVSpeechUtterance(string: texto)
+                u.voice = AVSpeechSynthesisVoice(language: "es-MX") ?? AVSpeechSynthesisVoice(language: "es-ES")
+                u.rate = 0.5
+                self.synth.speak(u)
+            }
+        }
     }
 
-    func callar() { synth.stopSpeaking(at: .immediate) }
+    func callar() { gen += 1; player?.stop(); synth.stopSpeaking(at: .immediate); hablando = false }
+
+    func audioPlayerDidFinishPlaying(_ p: AVAudioPlayer, successfully ok: Bool) { DispatchQueue.main.async { self.hablando = false } }
 
     func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) { DispatchQueue.main.async { self.hablando = false } }
     func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) { DispatchQueue.main.async { self.hablando = false } }

@@ -103,6 +103,7 @@ struct Burbuja: View {
 struct ContentView: View {
     @StateObject var brain = Brain()
     @StateObject var voz = Voz()
+    @StateObject var reloj = Reloj()
     @State var texto = ""
 
     var estado: Int { voz.oyendo ? 1 : (brain.pensando ? 2 : (voz.hablando ? 3 : 0)) }
@@ -134,6 +135,21 @@ struct ContentView: View {
                     }
                 }.padding(.horizontal, 18).padding(.top, 6)
 
+                TimelineView(.periodic(from: .now, by: 0.1)) { tl in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(tl.date, format: .dateTime.weekday(.wide).day().month(.wide)).font(.system(size: 10, design: .monospaced)).foregroundColor(CIAN.opacity(0.7))
+                            if reloj.cronoCorre || reloj.cronoAcum > 0 {
+                                Text("CRONO " + reloj.cronoTexto(tl.date)).font(.system(size: 13, weight: .medium, design: .monospaced)).foregroundColor(ORO)
+                            }
+                        }
+                        Spacer()
+                        if let r = reloj.tempRestante(tl.date) {
+                            Text("TEMP " + Reloj.fmt(r.rounded(.up), dec: false)).font(.system(size: 13, weight: .medium, design: .monospaced))
+                                .foregroundColor(r < 10 ? .red : CIAN)
+                        }
+                    }.padding(.horizontal, 20)
+                }
                 ZStack {
                     Reactor(estado: estado).scaleEffect(1.0 + (estado == 0 ? 0 : 0.03))
                     ForEach(0..<4, id: \.self) { i in
@@ -206,6 +222,11 @@ struct ContentView: View {
 
     func enviar(_ t: String) {
         brain.chat.append(Linea(yo: true, texto: t))
+        if let r = reloj.procesar(t) {
+            brain.chat.append(Linea(yo: false, texto: r))
+            voz.hablar(r)
+            return
+        }
         Task {
             var r = await brain.responder(t)
             if r.hasPrefix("Error:") { r = "No pude conectar con el cerebro, prueba otra vez en unos segundos." }
