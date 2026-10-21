@@ -28,6 +28,7 @@ final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudi
     }
     var bloqueado = false
     var cicloActivo = false
+    var tapPuesto = false
     var reqM: SFSpeechAudioBufferRecognitionRequest?
     var taskM: SFSpeechRecognitionTask?
     var silTimer: Timer?
@@ -48,6 +49,7 @@ final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudi
         } else {
             vigilante?.invalidate(); vigilante = nil
             cerrarCiclo()
+            engine.stop(); engine.inputNode.removeTap(onBus: 0); tapPuesto = false
             activo = false
         }
     }
@@ -60,12 +62,15 @@ final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudi
         let r = SFSpeechAudioBufferRecognitionRequest()
         r.shouldReportPartialResults = true
         reqM = r
-        let input = engine.inputNode
-        let fmt = input.outputFormat(forBus: 0)
-        input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: 1024, format: fmt) { [weak self] b, _ in self?.reqM?.append(b) }
-        engine.prepare()
-        do { try engine.start() } catch { return }
+        if !engine.isRunning || !tapPuesto {
+            let input = engine.inputNode
+            let fmt = input.outputFormat(forBus: 0)
+            input.removeTap(onBus: 0)
+            input.installTap(onBus: 0, bufferSize: 1024, format: fmt) { [weak self] b, _ in self?.reqM?.append(b) }
+            tapPuesto = true
+            engine.prepare()
+            do { try engine.start() } catch { tapPuesto = false; return }
+        }
         cicloActivo = true
         viaVentana = Date() < ventanaHasta
         activo = viaVentana
@@ -84,8 +89,7 @@ final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudi
         guard cicloActivo else { return }
         cicloActivo = false
         silTimer?.invalidate(); cicloTimer?.invalidate()
-        engine.stop()
-        engine.inputNode.removeTap(onBus: 0)
+        if !manosLibres { engine.stop(); engine.inputNode.removeTap(onBus: 0); tapPuesto = false }
         reqM?.endAudio()
         taskM?.cancel()
         reqM = nil; taskM = nil
@@ -120,7 +124,15 @@ final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudi
     }
     var timer: Timer?
 
-    override init() { super.init(); synth.delegate = self }
+    override init() {
+        super.init(); synth.delegate = self
+        NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] n in
+            guard let self = self, self.manosLibres,
+                  let t = n.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt, AVAudioSession.InterruptionType(rawValue: t) == .ended else { return }
+            self.cerrarCiclo(); self.engine.stop(); self.tapPuesto = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.arrancarCiclo() }
+        }
+    }
 
     func permisos() {
         SFSpeechRecognizer.requestAuthorization { _ in }
@@ -141,6 +153,7 @@ final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudi
         let fmt = input.outputFormat(forBus: 0)
         input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 1024, format: fmt) { [weak self] b, _ in self?.req?.append(b) }
+        tapPuesto = false
         engine.prepare()
         do { try engine.start() } catch { return }
         oyendo = true
@@ -170,6 +183,7 @@ final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudi
         timer?.invalidate()
         engine.stop()
         engine.inputNode.removeTap(onBus: 0)
+        tapPuesto = false
         req?.endAudio()
         task?.cancel()
         let t = parcial
