@@ -77,7 +77,7 @@ final class Brain: ObservableObject {
         ]]]
     }
 
-    let modelos = ["gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest"]
+    let modelos = ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.8-flash"]
 
     func post(_ contenido: [[String: Any]]) async throws -> [String: Any] {
         let body: [String: Any] = ["systemInstruction": ["parts": [["text": sistema()]]], "contents": contenido, "tools": herramientas()]
@@ -86,7 +86,7 @@ final class Brain: ObservableObject {
         for m in modelos {
             var url = URLRequest(url: URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(m):generateContent")!)
             url.httpMethod = "POST"
-            url.timeoutInterval = 20
+            url.timeoutInterval = m.contains("lite") ? 8 : 25
             url.setValue(Secrets.gemini, forHTTPHeaderField: "x-goog-api-key")
             url.setValue("application/json", forHTTPHeaderField: "content-type")
             url.httpBody = datos
