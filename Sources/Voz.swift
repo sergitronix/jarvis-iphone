@@ -16,6 +16,7 @@ final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudi
     @Published var hablando = false
     @Published var parcial = ""
     var onFinal: ((String) -> Void)?
+    var alTerminar: (() -> Void)?
     @Published var manosLibres = false
     @Published var activo = false
     @Published var nivel: Double = 0
@@ -236,8 +237,8 @@ final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudi
 
     func callar() { gen += 1; player?.stop(); synth.stopSpeaking(at: .immediate); hablando = false }
 
-    func audioPlayerDidFinishPlaying(_ p: AVAudioPlayer, successfully ok: Bool) { DispatchQueue.main.async { self.hablando = false; self.ventanaHasta = Date().addingTimeInterval(8); self.arrancarCiclo() } }
+    func audioPlayerDidFinishPlaying(_ p: AVAudioPlayer, successfully ok: Bool) { DispatchQueue.main.async { self.hablando = false; self.ventanaHasta = Date().addingTimeInterval(8); self.arrancarCiclo(); let f = self.alTerminar; self.alTerminar = nil; f?() } }
 
-    func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) { DispatchQueue.main.async { self.hablando = false; self.ventanaHasta = Date().addingTimeInterval(8); self.arrancarCiclo() } }
+    func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) { DispatchQueue.main.async { self.hablando = false; self.ventanaHasta = Date().addingTimeInterval(8); self.arrancarCiclo(); let f = self.alTerminar; self.alTerminar = nil; f?() } }
     func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) { DispatchQueue.main.async { self.hablando = false } }
 }

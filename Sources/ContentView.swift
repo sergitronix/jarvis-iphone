@@ -139,6 +139,8 @@ struct ContentView: View {
     @State var camAuto = false
     @State var camPregunta = ""
     @State var mostrarMapa = false
+    @State var fotoPend: Data? = nil
+    @State var fotoHasta = Date.distantPast
     @State var mapaConsulta = ""
     @Environment(\.scenePhase) var fase
 
@@ -243,7 +245,7 @@ struct ContentView: View {
                         .submitLabel(.send).onSubmit { enviarTexto() }
                     Button(action: {
                         camAuto = false
-                        camPregunta = texto.trimmingCharacters(in: .whitespaces).isEmpty ? "¿Qué ves? Descríbelo en pocas frases." : texto
+                        camPregunta = texto.trimmingCharacters(in: .whitespaces)
                         texto = ""
                         mostrarCam = true
                     }) {
@@ -307,6 +309,21 @@ struct ContentView: View {
     }
 
     func enviarFoto(_ d: Data, _ pregunta: String) {
+        let pl = pregunta.lowercased().folding(options: .diacriticInsensitive, locale: Locale(identifier: "es"))
+        let gen = ["mira esto", "mira esta", "mira eso", "que es esto", "que ves", "que estoy viendo", "lee esto", "identifica esto", "dime que es"]
+        let generica = pregunta.isEmpty || (pregunta.count < 26 && gen.contains(where: { pl.contains($0) }))
+        fotoPend = d; fotoHasta = Date().addingTimeInterval(180)
+        if generica {
+            let m = "Foto hecha. ¿Qué quieres saber de ella?"
+            brain.chat.append(Linea(yo: false, texto: m))
+            voz.alTerminar = { voz.escuchar() }
+            voz.hablar(m)
+            return
+        }
+        preguntarFoto(pregunta, d)
+    }
+
+    func preguntarFoto(_ pregunta: String, _ d: Data) {
         brain.chat.append(Linea(yo: true, texto: "📷 " + pregunta))
         Task {
             var r = await brain.responder(pregunta + " (Responde en pocas frases, para leerlo en voz alta.)", imagen: d)
@@ -317,10 +334,16 @@ struct ContentView: View {
     }
 
     func enviar(_ t: String) {
+        if let d = fotoPend, Date() < fotoHasta {
+            fotoHasta = Date().addingTimeInterval(180)
+            let pf = t.lowercased().folding(options: .diacriticInsensitive, locale: Locale(identifier: "es"))
+            if ["olvida la foto", "ya no", "otra cosa", "cancela"].contains(where: { pf.contains($0) }) { fotoPend = nil }
+            else if !["mira esto", "mira esta", "mira eso"].contains(where: { pf.contains($0) }) { preguntarFoto(t, d); return }
+        }
         brain.chat.append(Linea(yo: true, texto: t))
         let pl = t.lowercased().folding(options: .diacriticInsensitive, locale: Locale(identifier: "es"))
         if ["mira esto", "mira esta", "mira eso", "que es esto", "que ves", "que estoy viendo", "lee esto", "identifica esto", "dime que es"].contains(where: { pl.contains($0) }) {
-            camPregunta = t; camAuto = true; mostrarCam = true
+            fotoPend = nil; camPregunta = t; camAuto = true; mostrarCam = true
             return
         }
         if let r = reloj.procesar(t) {

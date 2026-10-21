@@ -80,30 +80,43 @@ final class Brain: ObservableObject {
         ]]]
     }
 
-    let modelos = ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.8-flash"]
+    let modelos = ["gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-flash-lite-latest"]
 
+    func llamar(_ m: String, _ datos: Data, _ tmax: Double) async throws -> [String: Any] {
+        var url = URLRequest(url: URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(m):generateContent")!)
+        url.httpMethod = "POST"; url.timeoutInterval = tmax
+        url.setValue(Secrets.gemini, forHTTPHeaderField: "x-goog-api-key")
+        url.setValue("application/json", forHTTPHeaderField: "content-type")
+        url.httpBody = datos
+        let (d, resp) = try await URLSession.shared.data(for: url)
+        let j = (try JSONSerialization.jsonObject(with: d) as? [String: Any]) ?? [:]
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if code < 400 { return j }
+        let msg = ((j["error"] as? [String: Any])?["message"] as? String) ?? "error \(code)"
+        Registro.add("modelo \(m) fallo \(code): \(msg.prefix(80))")
+        throw NSError(domain: "api", code: code, userInfo: [NSLocalizedDescriptionKey: msg])
+    }
+
+    // Lanza dos modelos a la vez y devuelve el primero que responde bien; si ambos fallan prueba el resto.
     func post(_ contenido: [[String: Any]], conImagen: Bool = false) async throws -> [String: Any] {
         let body: [String: Any] = ["systemInstruction": ["parts": [["text": sistema()]]], "contents": contenido, "tools": herramientas()]
         let datos = try JSONSerialization.data(withJSONObject: body)
+        let tmax: Double = conImagen ? 18 : 10
         var ultimo = "sin respuesta"
-        for m in modelos {
-            var url = URLRequest(url: URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(m):generateContent")!)
-            url.httpMethod = "POST"
-            url.timeoutInterval = (conImagen || !m.contains("lite")) ? 30 : 8
-            url.setValue(Secrets.gemini, forHTTPHeaderField: "x-goog-api-key")
-            url.setValue("application/json", forHTTPHeaderField: "content-type")
-            url.httpBody = datos
-            do {
-                let (d, resp) = try await URLSession.shared.data(for: url)
-                let j = (try JSONSerialization.jsonObject(with: d) as? [String: Any]) ?? [:]
-                let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
-                if code < 400 { return j }
-                ultimo = ((j["error"] as? [String: Any])?["message"] as? String) ?? "error \(code)"
-                Registro.add("modelo \(m) fallo \(code): \(ultimo)")
-            } catch {
-                ultimo = error.localizedDescription
-                Registro.add("modelo \(m) excepcion: \(ultimo)")
+        let tandas = [Array(modelos[0..<2]), Array(modelos[2...])]
+        for tanda in tandas {
+            let ganador: [String: Any]? = await withTaskGroup(of: [String: Any]?.self) { g in
+                for m in tanda {
+                    g.addTask {
+                        do { return try await self.llamar(m, datos, tmax) }
+                        catch { await MainActor.run { Registro.add("modelo \(m) excepcion: \(error.localizedDescription.prefix(80))") }; return nil }
+                    }
+                }
+                for await r in g { if let r = r { g.cancelAll(); return r } }
+                return nil
             }
+            if let g = ganador { return g }
+            ultimo = "ningún modelo respondió"
         }
         throw NSError(domain: "api", code: 1, userInfo: [NSLocalizedDescriptionKey: ultimo])
     }
