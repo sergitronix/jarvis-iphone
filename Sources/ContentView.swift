@@ -32,18 +32,28 @@ struct Rejilla: View {
 
 struct Reactor: View {
     var estado: Int  // 0 espera, 1 escuchando, 2 pensando, 3 hablando
+    var nivel: Double = 0
     var body: some View {
         TimelineView(.animation) { tl in
             let t = tl.date.timeIntervalSinceReferenceDate
             Canvas { g, size in
                 let c = CGPoint(x: size.width / 2, y: size.height / 2)
                 let m = min(size.width, size.height) / 2
-                let vel: Double = estado == 0 ? 0.5 : (estado == 2 ? 2.2 : 1.3)
-                let pulso = 0.5 + 0.5 * sin(t * (estado == 0 ? 1.6 : 5))
+                let vel: Double = estado == 0 ? 0.35 : (estado == 2 ? 2.6 : (estado == 1 ? 1.1 + nivel * 2 : 1.5))
+                let pulso = estado == 1 ? min(1, 0.3 + nivel * 2.5) : (estado == 3 ? 0.5 + 0.5 * sin(t * 7) * sin(t * 2.3 + 1) : 0.5 + 0.5 * sin(t * (estado == 0 ? 1.4 : 5)))
                 let col = estado == 1 ? ORO : CIAN
                 // halo
                 let halo = Path(ellipseIn: CGRect(x: c.x - m, y: c.y - m, width: m * 2, height: m * 2))
                 g.fill(halo, with: .radialGradient(Gradient(colors: [col.opacity(0.28 + 0.15 * pulso), .clear]), center: c, startRadius: 0, endRadius: m))
+                // ondas
+                if estado != 0 {
+                    for i in 0..<3 {
+                        let ph = (t * (estado == 2 ? 0.5 : 0.45) + Double(i) / 3).truncatingRemainder(dividingBy: 1)
+                        let rr = m * CGFloat(0.25 + ph * 0.75 * (estado == 1 ? 0.8 + nivel : 1))
+                        g.stroke(Path(ellipseIn: CGRect(x: c.x - rr, y: c.y - rr, width: rr * 2, height: rr * 2)),
+                                 with: .color(col.opacity((1 - ph) * (estado == 1 ? 0.55 + 0.4 * nivel : 0.4))), lineWidth: estado == 1 ? 3 : 2)
+                    }
+                }
                 // marcas
                 var marcas = Path()
                 for i in 0..<72 {
@@ -85,6 +95,26 @@ struct Reactor: View {
     }
 }
 
+struct FondoEstatico: View {
+    var body: some View {
+        Canvas { g, s in
+            let c = CGPoint(x: s.width / 2, y: s.height / 2)
+            let m = min(s.width, s.height) / 2
+            for f in [0.95, 0.8, 0.65, 0.5, 0.35] as [CGFloat] {
+                g.stroke(Path(ellipseIn: CGRect(x: c.x - m * f, y: c.y - m * f, width: m * f * 2, height: m * f * 2)), with: .color(CIAN.opacity(0.05)), lineWidth: 1)
+            }
+            var p = Path()
+            for i in 0..<120 {
+                let a = Double(i) / 120 * 2 * .pi
+                let r2 = m * (i % 5 == 0 ? 0.9 : 0.93)
+                p.move(to: CGPoint(x: c.x + CGFloat(cos(a)) * m * 0.96, y: c.y + CGFloat(sin(a)) * m * 0.96))
+                p.addLine(to: CGPoint(x: c.x + CGFloat(cos(a)) * r2, y: c.y + CGFloat(sin(a)) * r2))
+            }
+            g.stroke(p, with: .color(CIAN.opacity(0.07)), lineWidth: 1)
+        }.drawingGroup()
+    }
+}
+
 struct Burbuja: View {
     let l: Linea
     var body: some View {
@@ -118,7 +148,7 @@ struct ContentView: View {
             FONDO.ignoresSafeArea()
             Rejilla().ignoresSafeArea()
             GeometryReader { g in
-                Reactor(estado: estado).opacity(0.16)
+                FondoEstatico().opacity(0.9)
                     .frame(width: g.size.width * 1.9, height: g.size.width * 1.9)
                     .position(x: g.size.width / 2, y: g.size.height * 0.36)
             }.ignoresSafeArea().allowsHitTesting(false)
@@ -155,12 +185,20 @@ struct ContentView: View {
                     }.padding(.horizontal, 20)
                 }
                 ZStack {
-                    Reactor(estado: estado).scaleEffect(1.0 + (estado == 0 ? 0 : 0.03))
+                    Reactor(estado: estado, nivel: voz.nivel).drawingGroup().opacity(estado == 0 ? 0.7 : 1).animation(.easeInOut(duration: 0.4), value: estado)
                     ForEach(0..<4, id: \.self) { i in
                         Esquinas(l: 16).stroke(CIAN.opacity(0.7), lineWidth: 1.5).frame(width: 300, height: 300)
                             .rotationEffect(.degrees(Double(i) * 90))
                     }.opacity(0.0)
-                    VStack { Spacer(); Text((voz.oyendo || voz.activo) ? "TE ESCUCHO" : (voz.hablando ? "TOCA PARA CALLAR" : (voz.manosLibres ? "DI «JARVIS»" : "TOCA PARA HABLAR"))).font(.system(size: 9, design: .monospaced)).tracking(3).foregroundColor(CIAN.opacity(0.55)) }
+                    VStack { Spacer()
+                        HStack(spacing: 6) {
+                            Circle().fill(estado == 1 ? ORO : (estado == 0 ? CIAN.opacity(0.4) : CIAN)).frame(width: 7, height: 7)
+                            Text(estado == 1 ? "ESCUCHANDO" : (estado == 2 ? "PENSANDO" : (estado == 3 ? "HABLANDO · TOCA PARA CALLAR" : (voz.manosLibres ? "EN ESPERA · DI «JARVIS»" : "TOCA PARA HABLAR"))))
+                                .font(.system(size: 11, weight: .medium, design: .monospaced)).tracking(2)
+                                .foregroundColor(estado == 1 ? ORO : CIAN.opacity(estado == 0 ? 0.6 : 1))
+                        }.padding(.horizontal, 10).padding(.vertical, 4)
+                        .overlay(Esquinas(l: 6).stroke(estado == 1 ? ORO : CIAN.opacity(0.6), lineWidth: 1))
+                    }
                 }
                 .frame(maxWidth: .infinity).aspectRatio(1, contentMode: .fit).padding(.horizontal, 8).layoutPriority(0)
                     .onTapGesture { if voz.hablando { voz.callar() } else { voz.escuchar() } }

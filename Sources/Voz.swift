@@ -18,6 +18,19 @@ final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudi
     var onFinal: ((String) -> Void)?
     @Published var manosLibres = false
     @Published var activo = false
+    @Published var nivel: Double = 0
+    var ultimoNivel = Date.distantPast
+    func medir(_ b: AVAudioPCMBuffer) {
+        guard let ch = b.floatChannelData?[0] else { return }
+        let n = Int(b.frameLength); if n == 0 { return }
+        var s: Float = 0
+        for i in stride(from: 0, to: n, by: 4) { s += ch[i] * ch[i] }
+        let rms = Double((s / Float(n / 4 + 1)).squareRoot())
+        let ahora = Date()
+        guard ahora.timeIntervalSince(ultimoNivel) > 0.04 else { return }
+        ultimoNivel = ahora
+        DispatchQueue.main.async { self.nivel = self.nivel * 0.6 + min(1, rms * 6) * 0.4 }
+    }
     @Published var segundoPlano: Bool = (UserDefaults.standard.object(forKey: "segundoPlano") as? Bool) ?? true {
         didSet { UserDefaults.standard.set(segundoPlano, forKey: "segundoPlano") }
     }
@@ -66,7 +79,7 @@ final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudi
             let input = engine.inputNode
             let fmt = input.outputFormat(forBus: 0)
             input.removeTap(onBus: 0)
-            input.installTap(onBus: 0, bufferSize: 1024, format: fmt) { [weak self] b, _ in self?.reqM?.append(b) }
+            input.installTap(onBus: 0, bufferSize: 1024, format: fmt) { [weak self] b, _ in self?.reqM?.append(b); self?.medir(b) }
             tapPuesto = true
             engine.prepare()
             do { try engine.start() } catch { tapPuesto = false; return }
@@ -106,7 +119,7 @@ final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudi
         let p = plano(t)
         var cmd = ""
         if let rg = p.range(of: "jarvis", options: .backwards) {
-            if !activo { AudioServicesPlaySystemSound(1113) }
+            if !activo { AudioServicesPlaySystemSound(1113); UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
             activo = true
             cmd = String(t.dropFirst(p.distance(from: p.startIndex, to: rg.upperBound)))
         } else if viaVentana && activo {
@@ -158,7 +171,7 @@ final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudi
         let input = engine.inputNode
         let fmt = input.outputFormat(forBus: 0)
         input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: 1024, format: fmt) { [weak self] b, _ in self?.req?.append(b) }
+        input.installTap(onBus: 0, bufferSize: 1024, format: fmt) { [weak self] b, _ in self?.req?.append(b); self?.medir(b) }
         tapPuesto = false
         engine.prepare()
         do { try engine.start() } catch { return }
