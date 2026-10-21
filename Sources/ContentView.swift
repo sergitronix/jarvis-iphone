@@ -346,7 +346,7 @@ struct ContentView: View {
             fotoPend = nil; camPregunta = (t.count < 26 ? "" : t); camAuto = false; mostrarCam = true
             return
         }
-        if let r = reloj.procesar(t) {
+        if let r = reloj.procesar(t) ?? Notas.procesar(t) {
             brain.chat.append(Linea(yo: false, texto: r))
             voz.hablar(r)
             return
