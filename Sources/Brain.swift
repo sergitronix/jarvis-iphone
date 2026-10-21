@@ -14,7 +14,15 @@ final class Brain: ObservableObject {
 
     var memoria: [String] {
         get { UserDefaults.standard.stringArray(forKey: "memoria") ?? [] }
-        set { UserDefaults.standard.set(newValue, forKey: "memoria") }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "memoria")
+            let js = (try? JSONSerialization.data(withJSONObject: newValue)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+            Task { await Registro.guardar("memoria_movil.json", js) }
+        }
+    }
+    var memoriaPC: [String] {
+        get { UserDefaults.standard.stringArray(forKey: "memoria_pc") ?? [] }
+        set { UserDefaults.standard.set(newValue, forKey: "memoria_pc") }
     }
 
     struct Habilidad: Codable { var nombre: String; var descripcion: String; var plantilla: String }
@@ -39,6 +47,11 @@ final class Brain: ObservableObject {
     func actualizarConfig() async {
         if Date().timeIntervalSince(ultimaCfg) < 60 { return }
         ultimaCfg = Date()
+        Task {
+            if let (t, _) = await Registro.bajar("memoria_pc.json"), let a = (try? JSONSerialization.jsonObject(with: Data(t.utf8))) as? [String] { memoriaPC = a }
+            let js = (try? JSONSerialization.data(withJSONObject: memoria)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+            await Registro.guardar("memoria_movil.json", js)
+        }
         guard let u = URL(string: "https://raw.githubusercontent.com/sergitronix/jarvis-iphone/main/config.json?t=\(Int(Date().timeIntervalSince1970))") else { return }
         var r = URLRequest(url: u); r.timeoutInterval = 8; r.cachePolicy = .reloadIgnoringLocalCacheData
         if let (d, resp) = try? await URLSession.shared.data(for: r), (resp as? HTTPURLResponse)?.statusCode == 200,
@@ -54,6 +67,7 @@ final class Brain: ObservableObject {
         var s = "Eres Jarvis, el asistente personal de IA de Sergio, un founder y consultor de IA en Latinoamérica. Respondes siempre en español, conciso y directo, máximo tres oraciones salvo que pidan más. Tus respuestas se leen en voz alta: sin markdown, sin listas, sin emojis ni enlaces largos. Estás en su iPhone: puedes abrir apps y enlaces con la herramienta abrir_url (por ejemplo youtube.com/results?search_query=..., maps.apple.com/?q=..., spotify:search:..., tel:, sms:, shortcuts://run-workflow?name=...), programar recordatorios y guardar recuerdos. Para vídeos de YouTube abre la búsqueda. No puedes controlar el móvil más allá de eso. Ahora es " + f.string(from: Date()) + "."
         if let e = cfg["prompt_extra"] as? String, !e.isEmpty { s += " " + e }
         if !habilidades.isEmpty { s += " Tienes habilidades extra instaladas, úsalas cuando encajen: " + habilidades.map { $0.nombre + " (" + $0.descripcion + ")" }.joined(separator: "; ") + ". Si Sergio te pide una función nueva que se pueda hacer abriendo una URL o esquema de app con un texto variable, usa crear_habilidad con una plantilla que contenga {q}." }
+        if !memoriaPC.isEmpty { s += " Lo que sabe tu versión del PC sobre Sergio: " + memoriaPC.joined(separator: "; ") + "." }
         if !memoria.isEmpty { s += " Lo que recuerdas de Sergio: " + memoria.joined(separator: "; ") + "." }
         return s
     }
