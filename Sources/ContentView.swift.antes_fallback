@@ -1,0 +1,194 @@
+import SwiftUI
+import UserNotifications
+
+let CIAN = Color(red: 0.30, green: 0.90, blue: 1.0)
+let ORO = Color(red: 1.0, green: 0.68, blue: 0.22)
+let FONDO = Color(red: 0.015, green: 0.03, blue: 0.06)
+
+struct Esquinas: Shape {
+    var l: CGFloat = 12
+    func path(in r: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: r.minX, y: r.minY + l)); p.addLine(to: CGPoint(x: r.minX, y: r.minY)); p.addLine(to: CGPoint(x: r.minX + l, y: r.minY))
+        p.move(to: CGPoint(x: r.maxX - l, y: r.minY)); p.addLine(to: CGPoint(x: r.maxX, y: r.minY)); p.addLine(to: CGPoint(x: r.maxX, y: r.minY + l))
+        p.move(to: CGPoint(x: r.maxX, y: r.maxY - l)); p.addLine(to: CGPoint(x: r.maxX, y: r.maxY)); p.addLine(to: CGPoint(x: r.maxX - l, y: r.maxY))
+        p.move(to: CGPoint(x: r.minX + l, y: r.maxY)); p.addLine(to: CGPoint(x: r.minX, y: r.maxY)); p.addLine(to: CGPoint(x: r.minX, y: r.maxY - l))
+        return p
+    }
+}
+
+struct Rejilla: View {
+    var body: some View {
+        Canvas { g, s in
+            var p = Path()
+            var x: CGFloat = 0
+            while x < s.width { p.move(to: CGPoint(x: x, y: 0)); p.addLine(to: CGPoint(x: x, y: s.height)); x += 32 }
+            var y: CGFloat = 0
+            while y < s.height { p.move(to: CGPoint(x: 0, y: y)); p.addLine(to: CGPoint(x: s.width, y: y)); y += 32 }
+            g.stroke(p, with: .color(CIAN.opacity(0.045)), lineWidth: 0.5)
+        }
+    }
+}
+
+struct Reactor: View {
+    var estado: Int  // 0 espera, 1 escuchando, 2 pensando, 3 hablando
+    var body: some View {
+        TimelineView(.animation) { tl in
+            let t = tl.date.timeIntervalSinceReferenceDate
+            Canvas { g, size in
+                let c = CGPoint(x: size.width / 2, y: size.height / 2)
+                let m = min(size.width, size.height) / 2
+                let vel: Double = estado == 0 ? 0.5 : (estado == 2 ? 2.2 : 1.3)
+                let pulso = 0.5 + 0.5 * sin(t * (estado == 0 ? 1.6 : 5))
+                let col = estado == 1 ? ORO : CIAN
+                // halo
+                let halo = Path(ellipseIn: CGRect(x: c.x - m, y: c.y - m, width: m * 2, height: m * 2))
+                g.fill(halo, with: .radialGradient(Gradient(colors: [col.opacity(0.28 + 0.15 * pulso), .clear]), center: c, startRadius: 0, endRadius: m))
+                // marcas
+                var marcas = Path()
+                for i in 0..<72 {
+                    let a = Double(i) / 72 * 2 * .pi + t * 0.15 * vel
+                    let r1 = m * 0.93, r2 = m * (i % 6 == 0 ? 0.84 : 0.89)
+                    marcas.move(to: CGPoint(x: c.x + CGFloat(cos(a)) * r1, y: c.y + CGFloat(sin(a)) * r1))
+                    marcas.addLine(to: CGPoint(x: c.x + CGFloat(cos(a)) * r2, y: c.y + CGFloat(sin(a)) * r2))
+                }
+                g.stroke(marcas, with: .color(CIAN.opacity(0.55)), lineWidth: 1)
+                // anillos con arcos
+                let radios: [CGFloat] = [0.76, 0.62, 0.48, 0.34]
+                for (i, f) in radios.enumerated() {
+                    let r = m * f
+                    let dir: Double = i % 2 == 0 ? 1 : -1
+                    let ini = t * dir * vel * (0.5 + 0.35 * Double(i))
+                    var a1 = Path()
+                    a1.addArc(center: c, radius: r, startAngle: .radians(ini), endAngle: .radians(ini + 2.4), clockwise: false)
+                    g.stroke(a1, with: .color(CIAN.opacity(0.5 + 0.4 * pulso)), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    var a2 = Path()
+                    a2.addArc(center: c, radius: r, startAngle: .radians(ini + 3.3), endAngle: .radians(ini + 4.6), clockwise: false)
+                    g.stroke(a2, with: .color(ORO.opacity(0.55)), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                    g.stroke(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)), with: .color(CIAN.opacity(0.12)), lineWidth: 0.8)
+                }
+                // satélites
+                for i in 0..<3 {
+                    let a = t * vel * 1.4 + Double(i) * 2.094
+                    let r = m * 0.76
+                    let p = CGPoint(x: c.x + CGFloat(cos(a)) * r, y: c.y + CGFloat(sin(a)) * r)
+                    g.fill(Path(ellipseIn: CGRect(x: p.x - 3, y: p.y - 3, width: 6, height: 6)), with: .color(ORO))
+                }
+                // núcleo
+                let rc = m * (0.19 + 0.03 * pulso)
+                g.fill(Path(ellipseIn: CGRect(x: c.x - rc * 1.8, y: c.y - rc * 1.8, width: rc * 3.6, height: rc * 3.6)),
+                       with: .radialGradient(Gradient(colors: [ORO.opacity(0.6), .clear]), center: c, startRadius: 0, endRadius: rc * 1.8))
+                g.fill(Path(ellipseIn: CGRect(x: c.x - rc, y: c.y - rc, width: rc * 2, height: rc * 2)),
+                       with: .radialGradient(Gradient(colors: [.white, ORO, ORO.opacity(0.7)]), center: c, startRadius: 0, endRadius: rc))
+            }
+        }
+    }
+}
+
+struct Burbuja: View {
+    let l: Linea
+    var body: some View {
+        let col = l.yo ? ORO : CIAN
+        Text(l.texto)
+            .font(.system(size: 15, design: .rounded)).foregroundColor(.white)
+            .padding(.horizontal, 12).padding(.vertical, 9)
+            .background(col.opacity(0.08))
+            .overlay(Rectangle().stroke(col.opacity(0.25), lineWidth: 0.5))
+            .overlay(Esquinas(l: 9).stroke(col, lineWidth: 1.5))
+            .frame(maxWidth: .infinity, alignment: l.yo ? .trailing : .leading)
+            .padding(l.yo ? .leading : .trailing, 40)
+    }
+}
+
+struct ContentView: View {
+    @StateObject var brain = Brain()
+    @StateObject var voz = Voz()
+    @State var texto = ""
+
+    var estado: Int { voz.oyendo ? 1 : (brain.pensando ? 2 : (voz.hablando ? 3 : 0)) }
+    var nombre: String { ["EN ESPERA", "ESCUCHANDO", "PENSANDO", "HABLANDO"][estado] }
+
+    var body: some View {
+        ZStack {
+            FONDO.ignoresSafeArea()
+            Rejilla().ignoresSafeArea()
+            VStack(spacing: 6) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("J A R V I S").font(.system(size: 20, weight: .light, design: .monospaced)).foregroundColor(CIAN)
+                        Text("ASISTENTE PERSONAL").font(.system(size: 9, design: .monospaced)).foregroundColor(CIAN.opacity(0.5))
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 2) {
+                        TimelineView(.periodic(from: .now, by: 1)) { tl in
+                            Text(tl.date, format: .dateTime.hour().minute()).font(.system(size: 20, weight: .light, design: .monospaced)).foregroundColor(.white)
+                        }
+                        Text(nombre).font(.system(size: 10, design: .monospaced)).foregroundColor(estado == 0 ? CIAN.opacity(0.6) : ORO)
+                            .padding(.horizontal, 8).padding(.vertical, 2).overlay(Esquinas(l: 5).stroke(estado == 0 ? CIAN.opacity(0.6) : ORO, lineWidth: 1))
+                    }
+                }.padding(.horizontal, 18).padding(.top, 6)
+
+                Reactor(estado: estado).frame(height: 230)
+                    .onTapGesture { if voz.hablando { voz.callar() } else { voz.escuchar() } }
+
+                ScrollViewReader { sv in
+                    ScrollView(showsIndicators: false) {
+                        VStack(spacing: 10) {
+                            if brain.chat.isEmpty {
+                                VStack(spacing: 8) {
+                                    ForEach(["Pon un vídeo de gatos en YouTube", "Recuérdame en 10 minutos beber agua", "Llévame a casa en Maps"], id: \.self) { s in
+                                        Button(action: { enviar(s) }) {
+                                            Text(s).font(.system(size: 13, design: .monospaced)).foregroundColor(CIAN)
+                                                .frame(maxWidth: .infinity).padding(10).overlay(Esquinas(l: 8).stroke(CIAN.opacity(0.7), lineWidth: 1))
+                                        }
+                                    }
+                                }.padding(.top, 8)
+                            }
+                            ForEach(brain.chat) { l in Burbuja(l: l).id(l.id) }
+                            if voz.oyendo && !voz.parcial.isEmpty {
+                                Text(voz.parcial).font(.system(size: 15, design: .rounded)).foregroundColor(ORO.opacity(0.8)).frame(maxWidth: .infinity, alignment: .trailing)
+                            }
+                            if brain.pensando { Text("Procesando...").font(.system(size: 12, design: .monospaced)).foregroundColor(CIAN.opacity(0.6)).frame(maxWidth: .infinity, alignment: .leading) }
+                        }.padding(.horizontal, 16)
+                    }
+                    .onChange(of: brain.chat.count) { _ in if let u = brain.chat.last { withAnimation { sv.scrollTo(u.id, anchor: .bottom) } } }
+                }
+
+                HStack(spacing: 10) {
+                    TextField("Escribe una orden...", text: $texto)
+                        .padding(10).foregroundColor(.white)
+                        .background(CIAN.opacity(0.07)).overlay(Esquinas(l: 8).stroke(CIAN.opacity(0.7), lineWidth: 1))
+                        .submitLabel(.send).onSubmit { enviarTexto() }
+                    Button(action: { if voz.hablando { voz.callar() } else { voz.escuchar() } }) {
+                        ZStack {
+                            Circle().fill(voz.oyendo ? ORO : CIAN.opacity(0.9)).frame(width: 54, height: 54)
+                            Circle().stroke((voz.oyendo ? ORO : CIAN).opacity(0.5), lineWidth: 2).frame(width: 64, height: 64)
+                            Image(systemName: voz.hablando ? "speaker.slash.fill" : (voz.oyendo ? "waveform" : "mic.fill")).font(.system(size: 22)).foregroundColor(.black)
+                        }
+                    }
+                }.padding(.horizontal, 16).padding(.bottom, 8)
+            }
+        }
+        .onAppear {
+            voz.permisos()
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+            voz.onFinal = { t in enviar(t) }
+        }
+    }
+
+    func enviarTexto() {
+        let t = texto.trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty else { return }
+        texto = ""
+        enviar(t)
+    }
+
+    func enviar(_ t: String) {
+        brain.chat.append(Linea(yo: true, texto: t))
+        Task {
+            let r = await brain.responder(t)
+            brain.chat.append(Linea(yo: false, texto: r))
+            voz.hablar(r)
+        }
+    }
+}

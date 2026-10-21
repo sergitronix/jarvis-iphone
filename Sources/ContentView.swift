@@ -186,7 +186,8 @@ struct ContentView: View {
     func enviar(_ t: String) {
         brain.chat.append(Linea(yo: true, texto: t))
         Task {
-            let r = await brain.responder(t)
+            var r = await brain.responder(t)
+            if r.hasPrefix("Error:") { r = "No pude conectar con el cerebro, prueba otra vez en unos segundos." }
             brain.chat.append(Linea(yo: false, texto: r))
             voz.hablar(r)
         }

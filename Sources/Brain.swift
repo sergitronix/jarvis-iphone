@@ -35,23 +35,28 @@ final class Brain: ObservableObject {
         ]]]
     }
 
+    let modelos = ["gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest"]
+
     func post(_ contenido: [[String: Any]]) async throws -> [String: Any] {
-        var url = URLRequest(url: URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(modelo):generateContent")!)
-        url.httpMethod = "POST"
-        url.timeoutInterval = 90
-        url.setValue(Secrets.gemini, forHTTPHeaderField: "x-goog-api-key")
-        url.setValue("application/json", forHTTPHeaderField: "content-type")
         let body: [String: Any] = ["systemInstruction": ["parts": [["text": sistema()]]], "contents": contenido, "tools": herramientas()]
-        url.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let datos = try JSONSerialization.data(withJSONObject: body)
         var ultimo = "sin respuesta"
-        for intento in 0..<4 {
-            let (d, resp) = try await URLSession.shared.data(for: url)
-            let j = (try JSONSerialization.jsonObject(with: d) as? [String: Any]) ?? [:]
-            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
-            if code < 400 { return j }
-            ultimo = ((j["error"] as? [String: Any])?["message"] as? String) ?? "error \(code)"
-            if code == 429 || code == 503 || code == 500 { try? await Task.sleep(nanoseconds: UInt64(1_500_000_000 * (intento + 1))); continue }
-            break
+        for m in modelos {
+            var url = URLRequest(url: URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(m):generateContent")!)
+            url.httpMethod = "POST"
+            url.timeoutInterval = 20
+            url.setValue(Secrets.gemini, forHTTPHeaderField: "x-goog-api-key")
+            url.setValue("application/json", forHTTPHeaderField: "content-type")
+            url.httpBody = datos
+            do {
+                let (d, resp) = try await URLSession.shared.data(for: url)
+                let j = (try JSONSerialization.jsonObject(with: d) as? [String: Any]) ?? [:]
+                let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+                if code < 400 { return j }
+                ultimo = ((j["error"] as? [String: Any])?["message"] as? String) ?? "error \(code)"
+            } catch {
+                ultimo = error.localizedDescription
+            }
         }
         throw NSError(domain: "api", code: 1, userInfo: [NSLocalizedDescriptionKey: ultimo])
     }
