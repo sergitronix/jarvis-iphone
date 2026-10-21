@@ -74,6 +74,12 @@ final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudi
         cicloActivo = true
         viaVentana = Date() < ventanaHasta
         activo = viaVentana
+        if viaVentana {
+            silTimer?.invalidate()
+            silTimer = Timer.scheduledTimer(withTimeInterval: max(0.5, ventanaHasta.timeIntervalSinceNow), repeats: false) { [weak self] _ in
+                self?.activo = false; self?.viaVentana = false
+            }
+        }
         cicloTimer?.invalidate()
         cicloTimer = Timer.scheduledTimer(withTimeInterval: 50, repeats: false) { [weak self] _ in self?.cerrarCiclo() }
         taskM = rec.recognitionTask(with: r) { [weak self] result, err in

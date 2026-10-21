@@ -6,7 +6,7 @@ struct Linea: Identifiable { let id = UUID(); let yo: Bool; let texto: String }
 
 @MainActor
 final class Brain: ObservableObject {
-    @Published var chat: [Linea] = []
+    @Published var chat: [Linea] = [] { didSet { if chat.count > 80 { chat.removeFirst(chat.count - 80) } } }
     @Published var pensando = false
     var historial: [[String: Any]] = []
     let modelo = "gemini-3.8-flash"

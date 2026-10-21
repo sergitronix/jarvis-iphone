@@ -127,7 +127,7 @@ struct ContentView: View {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("J A R V I S").font(.system(size: 20, weight: .light, design: .monospaced)).foregroundColor(CIAN)
-                        Text("ASISTENTE PERSONAL").font(.system(size: 9, design: .monospaced)).foregroundColor(CIAN.opacity(0.5))
+                        Text("ASISTENTE PERSONAL  ·  V1.0").font(.system(size: 9, design: .monospaced)).foregroundColor(CIAN.opacity(0.5))
                     }
                     Spacer()
                     VStack(alignment: .trailing, spacing: 2) {

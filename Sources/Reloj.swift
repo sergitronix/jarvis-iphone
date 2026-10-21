@@ -37,7 +37,10 @@ final class Reloj: ObservableObject {
 
     func duracion(_ s: String) -> TimeInterval {
         var total: TimeInterval = 0
-        let pat = "(\\d+(?:[.,]\\d+)?|un|una|medio|media)\\s*(horas?|hs?|minutos?|mins?|segundos?|segs?)"
+        var s = s
+        let nums: [(String, String)] = [("cuarenta y cinco", "45"), ("veinticinco", "25"), ("treinta", "30"), ("cuarenta", "40"), ("cincuenta", "50"), ("sesenta", "60"), ("quince", "15"), ("veinte", "20"), ("diez", "10"), ("nueve", "9"), ("ocho", "8"), ("siete", "7"), ("seis", "6"), ("cinco", "5"), ("cuatro", "4"), ("tres", "3"), ("dos", "2")]
+        for (w, n) in nums { s = s.replacingOccurrences(of: "\\b" + w + "\\b", with: n, options: .regularExpression) }
+        let pat = "(\\d+(?:[.,]\\d+)?|un|una|medio|media)\\s*(horas?|hs?|minutos?|mins?|segundos?|segs?)\\b"
         guard let re = try? NSRegularExpression(pattern: pat) else { return 0 }
         let ns = s as NSString
         for m in re.matches(in: s, range: NSRange(location: 0, length: ns.length)) {
@@ -52,12 +55,14 @@ final class Reloj: ObservableObject {
 
     func procesar(_ texto: String) -> String? {
         let s = plano(texto)
+        let pal = Set(s.split(whereSeparator: { !$0.isLetter }).map(String.init))
+        func tiene(_ l: [String]) -> Bool { l.contains(where: { pal.contains($0) }) }
         if s.contains("cronometro") {
             let ahora = Date()
-            if s.contains("borra") || s.contains("reinicia") || s.contains("resetea") || s.contains("cero") || s.contains("quita") {
+            if tiene(["borra", "reinicia", "resetea", "cero", "quita", "reset"]) {
                 cronoCorre = false; cronoAcum = 0; cronoInicio = nil; return "Cronómetro a cero."
             }
-            if s.contains("para") || s.contains("deten") || s.contains("pausa") || s.contains("stop") {
+            if tiene(["para", "parar", "detener", "deten", "detenlo", "pausa", "stop"]) {
                 if cronoCorre { cronoAcum += ahora.timeIntervalSince(cronoInicio ?? ahora); cronoCorre = false }
                 return "Cronómetro parado en " + Reloj.fmt(cronoAcum, dec: false) + "."
             }
@@ -67,7 +72,7 @@ final class Reloj: ObservableObject {
         if s.contains("temporizador") || s.contains("cuenta atras") || s.contains("alarma de") {
             let dur = duracion(s)
             if dur <= 0 {
-                if s.contains("cancel") || s.contains("quita") || s.contains("borra") || s.contains("para") || s.contains("deten") {
+                if s.contains("cancel") || tiene(["quita", "borra", "para", "parar", "deten", "detener", "apaga"]) {
                     cancelar(); return "Temporizador cancelado."
                 }
                 return "¿De cuánto lo quieres?"
