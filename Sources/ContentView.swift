@@ -112,6 +112,12 @@ struct ContentView: View {
         ZStack {
             FONDO.ignoresSafeArea()
             Rejilla().ignoresSafeArea()
+            GeometryReader { g in
+                Reactor(estado: estado).opacity(0.16)
+                    .frame(width: g.size.width * 1.9, height: g.size.width * 1.9)
+                    .position(x: g.size.width / 2, y: g.size.height * 0.36)
+            }.ignoresSafeArea().allowsHitTesting(false)
+            RadialGradient(colors: [.clear, FONDO.opacity(0.85)], center: .center, startRadius: 150, endRadius: 520).ignoresSafeArea().allowsHitTesting(false)
             VStack(spacing: 6) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -128,7 +134,15 @@ struct ContentView: View {
                     }
                 }.padding(.horizontal, 18).padding(.top, 6)
 
-                Reactor(estado: estado).frame(height: 230)
+                ZStack {
+                    Reactor(estado: estado).scaleEffect(1.0 + (estado == 0 ? 0 : 0.03))
+                    ForEach(0..<4, id: \.self) { i in
+                        Esquinas(l: 16).stroke(CIAN.opacity(0.7), lineWidth: 1.5).frame(width: 300, height: 300)
+                            .rotationEffect(.degrees(Double(i) * 90))
+                    }.opacity(0.0)
+                    VStack { Spacer(); Text(voz.oyendo ? "TE ESCUCHO" : (voz.hablando ? "TOCA PARA CALLAR" : "TOCA PARA HABLAR")).font(.system(size: 9, design: .monospaced)).tracking(3).foregroundColor(CIAN.opacity(0.55)) }
+                }
+                .frame(maxWidth: .infinity).aspectRatio(1, contentMode: .fit).padding(.horizontal, 8).layoutPriority(0)
                     .onTapGesture { if voz.hablando { voz.callar() } else { voz.escuchar() } }
 
                 ScrollViewReader { sv in
@@ -153,6 +167,12 @@ struct ContentView: View {
                     }
                     .onChange(of: brain.chat.count) { _ in if let u = brain.chat.last { withAnimation { sv.scrollTo(u.id, anchor: .bottom) } } }
                 }
+                .padding(.vertical, 8)
+                .background(CIAN.opacity(0.04))
+                .overlay(Esquinas(l: 14).stroke(CIAN.opacity(0.8), lineWidth: 1.5))
+                .overlay(Rectangle().stroke(CIAN.opacity(0.15), lineWidth: 0.5))
+                .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.08), .init(color: .black, location: 1)], startPoint: .top, endPoint: .bottom))
+                .padding(.horizontal, 12).frame(minHeight: 120)
 
                 HStack(spacing: 10) {
                     TextField("Escribe una orden...", text: $texto)
