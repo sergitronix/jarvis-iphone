@@ -1,6 +1,8 @@
 import Foundation
 import AVFoundation
 import Speech
+import AudioToolbox
+import UIKit
 
 final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegate {
     var player: AVAudioPlayer?
@@ -14,6 +16,100 @@ final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudi
     @Published var hablando = false
     @Published var parcial = ""
     var onFinal: ((String) -> Void)?
+    @Published var manosLibres = false
+    @Published var activo = false
+    var bloqueado = false
+    var cicloActivo = false
+    var reqM: SFSpeechAudioBufferRecognitionRequest?
+    var taskM: SFSpeechRecognitionTask?
+    var silTimer: Timer?
+    var cicloTimer: Timer?
+    var vigilante: Timer?
+    var ventanaHasta = Date.distantPast
+    var viaVentana = false
+
+    func plano(_ t: String) -> String { t.lowercased().folding(options: .diacriticInsensitive, locale: Locale(identifier: "es")) }
+
+    func alternarManos() {
+        manosLibres.toggle()
+        UIApplication.shared.isIdleTimerDisabled = manosLibres
+        if manosLibres {
+            vigilante?.invalidate()
+            vigilante = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in self?.arrancarCiclo() }
+            arrancarCiclo()
+        } else {
+            vigilante?.invalidate(); vigilante = nil
+            cerrarCiclo()
+            activo = false
+        }
+    }
+
+    func arrancarCiclo() {
+        guard manosLibres, !cicloActivo, !hablando, !oyendo, !bloqueado, let rec = rec, rec.isAvailable else { return }
+        let s = AVAudioSession.sharedInstance()
+        try? s.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
+        try? s.setActive(true)
+        let r = SFSpeechAudioBufferRecognitionRequest()
+        r.shouldReportPartialResults = true
+        reqM = r
+        let input = engine.inputNode
+        let fmt = input.outputFormat(forBus: 0)
+        input.removeTap(onBus: 0)
+        input.installTap(onBus: 0, bufferSize: 1024, format: fmt) { [weak self] b, _ in self?.reqM?.append(b) }
+        engine.prepare()
+        do { try engine.start() } catch { return }
+        cicloActivo = true
+        viaVentana = Date() < ventanaHasta
+        activo = viaVentana
+        cicloTimer?.invalidate()
+        cicloTimer = Timer.scheduledTimer(withTimeInterval: 50, repeats: false) { [weak self] _ in self?.cerrarCiclo() }
+        taskM = rec.recognitionTask(with: r) { [weak self] result, err in
+            DispatchQueue.main.async {
+                guard let self = self, self.reqM === r else { return }
+                if let res = result { self.procesarM(res.bestTranscription.formattedString) }
+                if err != nil || (result?.isFinal ?? false) { self.cerrarCiclo() }
+            }
+        }
+    }
+
+    func cerrarCiclo() {
+        guard cicloActivo else { return }
+        cicloActivo = false
+        silTimer?.invalidate(); cicloTimer?.invalidate()
+        engine.stop()
+        engine.inputNode.removeTap(onBus: 0)
+        reqM?.endAudio()
+        taskM?.cancel()
+        reqM = nil; taskM = nil
+        if !hablando { activo = false }
+    }
+
+    func procesarM(_ t: String) {
+        let p = plano(t)
+        var cmd = ""
+        if let rg = p.range(of: "jarvis", options: .backwards) {
+            if !activo { AudioServicesPlaySystemSound(1113) }
+            activo = true
+            cmd = String(t.dropFirst(p.distance(from: p.startIndex, to: rg.upperBound)))
+        } else if viaVentana && activo {
+            cmd = t
+        } else { return }
+        cmd = cmd.trimmingCharacters(in: CharacterSet(charactersIn: " ,.:;!?¿¡"))
+        silTimer?.invalidate()
+        if cmd.isEmpty {
+            silTimer = Timer.scheduledTimer(withTimeInterval: 7.0, repeats: false) { [weak self] _ in
+                self?.activo = false; self?.viaVentana = false; self?.cerrarCiclo()
+            }
+        } else {
+            silTimer = Timer.scheduledTimer(withTimeInterval: 1.8, repeats: false) { [weak self] _ in
+                guard let self = self else { return }
+                self.viaVentana = false
+                self.cerrarCiclo()
+                self.activo = false
+                self.onFinal?(cmd)
+            }
+        }
+    }
     var timer: Timer?
 
     override init() { super.init(); synth.delegate = self }
@@ -25,6 +121,7 @@ final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudi
 
     func escuchar() {
         if oyendo { terminar(); return }
+        cerrarCiclo()
         gen += 1; player?.stop(); hablando = false; synth.stopSpeaking(at: .immediate)
         let s = AVAudioSession.sharedInstance()
         try? s.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
@@ -76,6 +173,7 @@ final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudi
         gen += 1
         let mi = gen
         hablando = true
+        cerrarCiclo()
         let s = AVAudioSession.sharedInstance()
         try? s.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
         try? s.setActive(true)
@@ -97,8 +195,8 @@ final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudi
 
     func callar() { gen += 1; player?.stop(); synth.stopSpeaking(at: .immediate); hablando = false }
 
-    func audioPlayerDidFinishPlaying(_ p: AVAudioPlayer, successfully ok: Bool) { DispatchQueue.main.async { self.hablando = false } }
+    func audioPlayerDidFinishPlaying(_ p: AVAudioPlayer, successfully ok: Bool) { DispatchQueue.main.async { self.hablando = false; self.ventanaHasta = Date().addingTimeInterval(8); self.arrancarCiclo() } }
 
-    func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) { DispatchQueue.main.async { self.hablando = false } }
+    func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) { DispatchQueue.main.async { self.hablando = false; self.ventanaHasta = Date().addingTimeInterval(8); self.arrancarCiclo() } }
     func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) { DispatchQueue.main.async { self.hablando = false } }
 }

@@ -106,7 +106,7 @@ struct ContentView: View {
     @StateObject var reloj = Reloj()
     @State var texto = ""
 
-    var estado: Int { voz.oyendo ? 1 : (brain.pensando ? 2 : (voz.hablando ? 3 : 0)) }
+    var estado: Int { (voz.oyendo || voz.activo) ? 1 : (brain.pensando ? 2 : (voz.hablando ? 3 : 0)) }
     var nombre: String { ["EN ESPERA", "ESCUCHANDO", "PENSANDO", "HABLANDO"][estado] }
 
     var body: some View {
@@ -156,7 +156,7 @@ struct ContentView: View {
                         Esquinas(l: 16).stroke(CIAN.opacity(0.7), lineWidth: 1.5).frame(width: 300, height: 300)
                             .rotationEffect(.degrees(Double(i) * 90))
                     }.opacity(0.0)
-                    VStack { Spacer(); Text(voz.oyendo ? "TE ESCUCHO" : (voz.hablando ? "TOCA PARA CALLAR" : "TOCA PARA HABLAR")).font(.system(size: 9, design: .monospaced)).tracking(3).foregroundColor(CIAN.opacity(0.55)) }
+                    VStack { Spacer(); Text((voz.oyendo || voz.activo) ? "TE ESCUCHO" : (voz.hablando ? "TOCA PARA CALLAR" : (voz.manosLibres ? "DI «JARVIS»" : "TOCA PARA HABLAR"))).font(.system(size: 9, design: .monospaced)).tracking(3).foregroundColor(CIAN.opacity(0.55)) }
                 }
                 .frame(maxWidth: .infinity).aspectRatio(1, contentMode: .fit).padding(.horizontal, 8).layoutPriority(0)
                     .onTapGesture { if voz.hablando { voz.callar() } else { voz.escuchar() } }
@@ -181,6 +181,7 @@ struct ContentView: View {
                             if brain.pensando { Text("Procesando...").font(.system(size: 12, design: .monospaced)).foregroundColor(CIAN.opacity(0.6)).frame(maxWidth: .infinity, alignment: .leading) }
                         }.padding(.horizontal, 16)
                     }
+                    .onChange(of: brain.pensando) { p in voz.bloqueado = p }
                     .onChange(of: brain.chat.count) { _ in if let u = brain.chat.last { withAnimation { sv.scrollTo(u.id, anchor: .bottom) } } }
                 }
                 .padding(.vertical, 8)
@@ -195,6 +196,13 @@ struct ContentView: View {
                         .padding(10).foregroundColor(.white)
                         .background(CIAN.opacity(0.07)).overlay(Esquinas(l: 8).stroke(CIAN.opacity(0.7), lineWidth: 1))
                         .submitLabel(.send).onSubmit { enviarTexto() }
+                    Button(action: { voz.alternarManos() }) {
+                        Image(systemName: voz.manosLibres ? "ear.fill" : "ear").font(.system(size: 20))
+                            .foregroundColor(voz.manosLibres ? .black : CIAN)
+                            .frame(width: 44, height: 44)
+                            .background(Circle().fill(voz.manosLibres ? ORO : CIAN.opacity(0.1)))
+                            .overlay(Circle().stroke(voz.manosLibres ? ORO : CIAN.opacity(0.6), lineWidth: 1.5))
+                    }
                     Button(action: { if voz.hablando { voz.callar() } else { voz.escuchar() } }) {
                         ZStack {
                             Circle().fill(voz.oyendo ? ORO : CIAN.opacity(0.9)).frame(width: 54, height: 54)

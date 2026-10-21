@@ -12,6 +12,7 @@ targets:
       properties:
         CFBundleDisplayName: Jarvis
         UILaunchScreen: {}
+        UIBackgroundModes: [audio]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         NSMicrophoneUsageDescription: Jarvis necesita el micrófono para escucharte.
         NSSpeechRecognitionUsageDescription: Jarvis usa el reconocimiento de voz para entenderte.
