@@ -285,7 +285,7 @@ struct ContentView: View {
             }
         }
         .fullScreenCover(isPresented: $mostrarCam) {
-            CamaraSheet(auto: camAuto, onFoto: { d in enviarFoto(d, camPregunta) }, onCerrar: { mostrarCam = false })
+            CamaraVivo(voz: voz, brain: brain, preguntaInicial: camPregunta, onCerrar: { mostrarCam = false; voz.onFinal = { t in enviar(t) } })
         }
         .fullScreenCover(isPresented: $mostrarMapa) {
             MapaHolo(consulta: mapaConsulta, onCerrar: { mostrarMapa = false })
@@ -343,7 +343,7 @@ struct ContentView: View {
         brain.chat.append(Linea(yo: true, texto: t))
         let pl = t.lowercased().folding(options: .diacriticInsensitive, locale: Locale(identifier: "es"))
         if ["mira esto", "mira esta", "mira eso", "que es esto", "que ves", "que estoy viendo", "lee esto", "identifica esto", "dime que es"].contains(where: { pl.contains($0) }) {
-            fotoPend = nil; camPregunta = t; camAuto = true; mostrarCam = true
+            fotoPend = nil; camPregunta = (t.count < 26 ? "" : t); camAuto = false; mostrarCam = true
             return
         }
         if let r = reloj.procesar(t) {
