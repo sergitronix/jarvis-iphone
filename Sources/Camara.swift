@@ -1,4 +1,4 @@
-import SwiftUI
+﻿import SwiftUI
 import AVFoundation
 import CoreImage
 
@@ -19,7 +19,12 @@ final class Camara: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBu
                     self.session.beginConfiguration()
                     self.session.sessionPreset = .hd1280x720
                     if let dev = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
-                       let inp = try? AVCaptureDeviceInput(device: dev), self.session.canAddInput(inp) { self.session.addInput(inp) }
+                       let inp = try? AVCaptureDeviceInput(device: dev), self.session.canAddInput(inp) { self.session.addInput(inp)
+                        if (try? dev.lockForConfiguration()) != nil {
+                            dev.activeVideoMinFrameDuration = CMTime(value: 1, timescale: 15)
+                            dev.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: 15)
+                            dev.unlockForConfiguration()
+                        } }
                     self.salida.alwaysDiscardsLateVideoFrames = true
                     self.salida.setSampleBufferDelegate(self, queue: self.cola)
                     if self.session.canAddOutput(self.salida) { self.session.addOutput(self.salida) }
@@ -46,10 +51,10 @@ final class Camara: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBu
         guard let cg = ctx.createCGImage(ci, from: ci.extent) else { return nil }
         let img = UIImage(cgImage: cg)
         let m = max(img.size.width, img.size.height)
-        let k = min(1, 1024 / m)
+        let k = min(1, 768 / m)
         let ns = CGSize(width: img.size.width * k, height: img.size.height * k)
         let r = UIGraphicsImageRenderer(size: ns).image { _ in img.draw(in: CGRect(origin: .zero, size: ns)) }
-        return r.jpegData(compressionQuality: 0.7)
+        return r.jpegData(compressionQuality: 0.6)
     }
 }
 
@@ -77,6 +82,7 @@ struct CamaraVivo: View {
     @State var ultimaResp = ""
     @State var ultimaPreg = ""
     @State var flash = false
+    @State var ultimaAct = Date()
     let tic = Timer.publish(every: 0.8, on: .main, in: .common).autoconnect()
 
     var estadoTxt: String { voz.oyendo ? "ESCUCHANDO" : (brain.pensando ? "MIRANDO Y PENSANDO" : (voz.hablando ? "HABLANDO · TOCA PARA CALLAR" : "PREPARANDO")) }
@@ -84,6 +90,7 @@ struct CamaraVivo: View {
 
     func cerrar() {
         abierta = false
+        UIApplication.shared.isIdleTimerDisabled = false
         voz.callar(); if voz.oyendo { voz.terminar() }
         voz.onFinal = nil
         cam.parar(); onCerrar()
@@ -91,6 +98,7 @@ struct CamaraVivo: View {
 
     func preguntar(_ t: String) {
         guard abierta else { return }
+        ultimaAct = Date()
         let pl = t.lowercased().folding(options: .diacriticInsensitive, locale: Locale(identifier: "es"))
         if ["cierra la camara", "cerrar camara", "salir de la camara", "apaga la camara", "quita la camara"].contains(where: { pl.contains($0) }) { cerrar(); return }
         ultimaPreg = t; ultimaResp = ""
@@ -140,14 +148,21 @@ struct CamaraVivo: View {
             }
         }
         .onReceive(tic) { _ in
+            if (voz.oyendo && !voz.parcial.isEmpty) || voz.hablando || brain.pensando { ultimaAct = Date() }
+            if abierta && Date().timeIntervalSince(ultimaAct) > 75 {
+                Registro.add("camara vivo: cerrada por inactividad")
+                cerrar(); return
+            }
             if abierta && !voz.oyendo && !voz.hablando && !brain.pensando { voz.escuchar() }
         }
         .onAppear {
             cam.iniciar()
+            UIApplication.shared.isIdleTimerDisabled = true
             voz.onFinal = { t in preguntar(t) }
             let p = preguntaInicial.trimmingCharacters(in: .whitespaces)
             if !p.isEmpty { DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { preguntar(p) } }
         }
-        .onDisappear { abierta = false; cam.parar() }
+        .onDisappear { abierta = false; cam.parar(); UIApplication.shared.isIdleTimerDisabled = false }
     }
 }
+
