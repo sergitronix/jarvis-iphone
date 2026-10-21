@@ -105,6 +105,10 @@ struct ContentView: View {
     @StateObject var voz = Voz()
     @StateObject var reloj = Reloj()
     @State var texto = ""
+    @State var mostrarCam = false
+    @State var camAuto = false
+    @State var camPregunta = ""
+    @Environment(\.scenePhase) var fase
 
     var estado: Int { (voz.oyendo || voz.activo) ? 1 : (brain.pensando ? 2 : (voz.hablando ? 3 : 0)) }
     var nombre: String { ["EN ESPERA", "ESCUCHANDO", "PENSANDO", "HABLANDO"][estado] }
@@ -181,6 +185,7 @@ struct ContentView: View {
                             if brain.pensando { Text("Procesando...").font(.system(size: 12, design: .monospaced)).foregroundColor(CIAN.opacity(0.6)).frame(maxWidth: .infinity, alignment: .leading) }
                         }.padding(.horizontal, 16)
                     }
+                    .onChange(of: fase) { f in voz.cambioFase(f == .active) }
                     .onChange(of: brain.pensando) { p in voz.bloqueado = p }
                     .onChange(of: brain.chat.count) { _ in if let u = brain.chat.last { withAnimation { sv.scrollTo(u.id, anchor: .bottom) } } }
                 }
@@ -196,10 +201,29 @@ struct ContentView: View {
                         .padding(10).foregroundColor(.white)
                         .background(CIAN.opacity(0.07)).overlay(Esquinas(l: 8).stroke(CIAN.opacity(0.7), lineWidth: 1))
                         .submitLabel(.send).onSubmit { enviarTexto() }
+                    Button(action: {
+                        camAuto = false
+                        camPregunta = texto.trimmingCharacters(in: .whitespaces).isEmpty ? "¿Qué ves? Descríbelo en pocas frases." : texto
+                        texto = ""
+                        mostrarCam = true
+                    }) {
+                        Image(systemName: "camera.fill").font(.system(size: 17)).foregroundColor(CIAN)
+                            .frame(width: 38, height: 38).background(Circle().fill(CIAN.opacity(0.1)))
+                            .overlay(Circle().stroke(CIAN.opacity(0.6), lineWidth: 1.5))
+                    }
+                    Button(action: {
+                        voz.segundoPlano.toggle()
+                        brain.chat.append(Linea(yo: false, texto: voz.segundoPlano ? "Segundo plano activado: sigo escuchando con la pantalla bloqueada." : "Segundo plano desactivado: dejo de escuchar al salir de la app."))
+                    }) {
+                        Image(systemName: voz.segundoPlano ? "moon.fill" : "moon").font(.system(size: 17))
+                            .foregroundColor(voz.segundoPlano ? .black : CIAN)
+                            .frame(width: 38, height: 38).background(Circle().fill(voz.segundoPlano ? ORO : CIAN.opacity(0.1)))
+                            .overlay(Circle().stroke(voz.segundoPlano ? ORO : CIAN.opacity(0.6), lineWidth: 1.5))
+                    }
                     Button(action: { voz.alternarManos() }) {
-                        Image(systemName: voz.manosLibres ? "ear.fill" : "ear").font(.system(size: 20))
+                        Image(systemName: voz.manosLibres ? "ear.fill" : "ear").font(.system(size: 17))
                             .foregroundColor(voz.manosLibres ? .black : CIAN)
-                            .frame(width: 44, height: 44)
+                            .frame(width: 38, height: 38)
                             .background(Circle().fill(voz.manosLibres ? ORO : CIAN.opacity(0.1)))
                             .overlay(Circle().stroke(voz.manosLibres ? ORO : CIAN.opacity(0.6), lineWidth: 1.5))
                     }
@@ -212,6 +236,9 @@ struct ContentView: View {
                     }
                 }.padding(.horizontal, 16).padding(.bottom, 8)
             }
+        }
+        .fullScreenCover(isPresented: $mostrarCam) {
+            CamaraSheet(auto: camAuto, onFoto: { d in enviarFoto(d, camPregunta) }, onCerrar: { mostrarCam = false })
         }
         .onAppear {
             voz.permisos()
@@ -228,8 +255,23 @@ struct ContentView: View {
         enviar(t)
     }
 
+    func enviarFoto(_ d: Data, _ pregunta: String) {
+        brain.chat.append(Linea(yo: true, texto: "📷 " + pregunta))
+        Task {
+            var r = await brain.responder(pregunta + " (Responde en pocas frases, para leerlo en voz alta.)", imagen: d)
+            if r.hasPrefix("Error:") { r = "No pude analizar la foto, prueba otra vez." }
+            brain.chat.append(Linea(yo: false, texto: r))
+            voz.hablar(r)
+        }
+    }
+
     func enviar(_ t: String) {
         brain.chat.append(Linea(yo: true, texto: t))
+        let pl = t.lowercased().folding(options: .diacriticInsensitive, locale: Locale(identifier: "es"))
+        if ["mira esto", "mira esta", "mira eso", "que es esto", "que ves", "que estoy viendo", "lee esto", "identifica esto", "dime que es"].contains(where: { pl.contains($0) }) {
+            camPregunta = t; camAuto = true; mostrarCam = true
+            return
+        }
         if let r = reloj.procesar(t) {
             brain.chat.append(Linea(yo: false, texto: r))
             voz.hablar(r)

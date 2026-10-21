@@ -144,12 +144,14 @@ final class Brain: ObservableObject {
         }
     }
 
-    func responder(_ texto: String) async -> String {
+    func responder(_ texto: String, imagen: Data? = nil) async -> String {
         pensando = true
         defer { pensando = false }
         await actualizarConfig()
         var trabajo = historial
-        trabajo.append(["role": "user", "parts": [["text": texto]]])
+        var partesU: [[String: Any]] = [["text": texto]]
+        if let im = imagen { partesU.append(["inlineData": ["mimeType": "image/jpeg", "data": im.base64EncodedString()]]) }
+        trabajo.append(["role": "user", "parts": partesU])
         var final = ""
         do {
             for _ in 0..<6 {
@@ -174,7 +176,7 @@ final class Brain: ObservableObject {
             return "Error: " + error.localizedDescription
         }
         if final.isEmpty { final = "Hecho." }
-        historial.append(["role": "user", "parts": [["text": texto]]])
+        historial.append(["role": "user", "parts": [["text": (imagen != nil ? "(Sergio enseñó una foto) " : "") + texto]]])
         historial.append(["role": "model", "parts": [["text": final]]])
         if historial.count > 24 { historial.removeFirst(historial.count - 24) }
         return final

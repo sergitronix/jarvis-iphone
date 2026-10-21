@@ -18,6 +18,14 @@ final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudi
     var onFinal: ((String) -> Void)?
     @Published var manosLibres = false
     @Published var activo = false
+    @Published var segundoPlano: Bool = (UserDefaults.standard.object(forKey: "segundoPlano") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(segundoPlano, forKey: "segundoPlano") }
+    }
+    var enSegundo = false
+    func cambioFase(_ activa: Bool) {
+        enSegundo = !activa
+        if enSegundo && !segundoPlano { cerrarCiclo(); activo = false }
+    }
     var bloqueado = false
     var cicloActivo = false
     var reqM: SFSpeechAudioBufferRecognitionRequest?
@@ -45,7 +53,7 @@ final class Voz: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudi
     }
 
     func arrancarCiclo() {
-        guard manosLibres, !cicloActivo, !hablando, !oyendo, !bloqueado, let rec = rec, rec.isAvailable else { return }
+        guard manosLibres, !cicloActivo, !hablando, !oyendo, !bloqueado, !(enSegundo && !segundoPlano), let rec = rec, rec.isAvailable else { return }
         let s = AVAudioSession.sharedInstance()
         try? s.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
         try? s.setActive(true)
