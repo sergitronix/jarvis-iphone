@@ -1,6 +1,7 @@
 name: build
 on:
   push:
+    branches: [main]
   workflow_dispatch:
 jobs:
   ipa:
@@ -12,8 +13,9 @@ jobs:
       - name: Secretos
         env:
           K: ${{ secrets.GEMINI_API_KEY }}
+          L: ${{ secrets.LOG_TOKEN }}
         run: |
-          printf 'enum Secrets { static let gemini = "%s" }\n' "$K" > Sources/Secrets.swift
+          printf 'enum Secrets { static let gemini = "%s"; static let log = "%s" }\n' "$K" "$L" > Sources/Secrets.swift
       - name: Proyecto
         run: xcodegen generate
       - name: Compilar

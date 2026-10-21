@@ -18,6 +18,7 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         NSMicrophoneUsageDescription: Jarvis necesita el micrófono para escucharte.
         NSCameraUsageDescription: Jarvis usa la cámara para ver lo que le enseñas.
+        NSLocationWhenInUseUsageDescription: Jarvis usa tu ubicación para el mapa y para ayudarte.
         NSSpeechRecognitionUsageDescription: Jarvis usa el reconocimiento de voz para entenderte.
     settings:
       base:

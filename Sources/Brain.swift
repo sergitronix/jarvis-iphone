@@ -8,6 +8,7 @@ struct Linea: Identifiable { let id = UUID(); let yo: Bool; let texto: String }
 final class Brain: ObservableObject {
     @Published var chat: [Linea] = [] { didSet { if chat.count > 80 { chat.removeFirst(chat.count - 80) } } }
     @Published var pensando = false
+    @Published var mapaPedido: String? = nil
     var historial: [[String: Any]] = []
     let modelo = "gemini-3.8-flash"
 
@@ -73,20 +74,22 @@ final class Brain: ObservableObject {
              "parameters": ["type": "OBJECT", "properties": ["mensaje": ["type": "STRING"], "en_minutos": ["type": "NUMBER"]], "required": ["mensaje", "en_minutos"]]],
             ["name": "recordar", "description": "Guarda un dato de Sergio en la memoria de largo plazo.",
              "parameters": ["type": "OBJECT", "properties": ["texto": ["type": "STRING"]], "required": ["texto"]]],
+            ["name": "mostrar_mapa", "description": "Muestra un mapa holograma dentro de la app. Con consulta busca y marca ese lugar (por ejemplo 'farmacia' o 'Torre Eiffel'); con consulta vacía muestra dónde está Sergio.",
+             "parameters": ["type": "OBJECT", "properties": ["consulta": ["type": "STRING"]]]],
             ["name": "olvidar_todo", "description": "Borra toda la memoria de largo plazo."]
         ]]]
     }
 
     let modelos = ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.8-flash"]
 
-    func post(_ contenido: [[String: Any]]) async throws -> [String: Any] {
+    func post(_ contenido: [[String: Any]], conImagen: Bool = false) async throws -> [String: Any] {
         let body: [String: Any] = ["systemInstruction": ["parts": [["text": sistema()]]], "contents": contenido, "tools": herramientas()]
         let datos = try JSONSerialization.data(withJSONObject: body)
         var ultimo = "sin respuesta"
         for m in modelos {
             var url = URLRequest(url: URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(m):generateContent")!)
             url.httpMethod = "POST"
-            url.timeoutInterval = m.contains("lite") ? 8 : 25
+            url.timeoutInterval = (conImagen || !m.contains("lite")) ? 30 : 8
             url.setValue(Secrets.gemini, forHTTPHeaderField: "x-goog-api-key")
             url.setValue("application/json", forHTTPHeaderField: "content-type")
             url.httpBody = datos
@@ -96,8 +99,10 @@ final class Brain: ObservableObject {
                 let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
                 if code < 400 { return j }
                 ultimo = ((j["error"] as? [String: Any])?["message"] as? String) ?? "error \(code)"
+                Registro.add("modelo \(m) fallo \(code): \(ultimo)")
             } catch {
                 ultimo = error.localizedDescription
+                Registro.add("modelo \(m) excepcion: \(ultimo)")
             }
         }
         throw NSError(domain: "api", code: 1, userInfo: [NSLocalizedDescriptionKey: ultimo])
@@ -122,6 +127,9 @@ final class Brain: ObservableObject {
         case "recordar":
             if let t = inp["texto"] as? String { memoria.append(t) }
             return "guardado"
+        case "mostrar_mapa":
+            mapaPedido = (inp["consulta"] as? String) ?? ""
+            return "mapa mostrado"
         case "olvidar_todo":
             memoria = []; return "memoria borrada"
         case "crear_habilidad":
@@ -146,6 +154,8 @@ final class Brain: ObservableObject {
 
     func responder(_ texto: String, imagen: Data? = nil) async -> String {
         pensando = true
+        let t0 = Date()
+        Registro.add("pregunta de \(texto.count) letras\(imagen != nil ? " +foto \(imagen!.count/1024)KB" : "")")
         defer { pensando = false }
         await actualizarConfig()
         var trabajo = historial
@@ -155,7 +165,7 @@ final class Brain: ObservableObject {
         var final = ""
         do {
             for _ in 0..<6 {
-                let j = try await post(trabajo)
+                let j = try await post(trabajo, conImagen: imagen != nil)
                 guard let cand = (j["candidates"] as? [[String: Any]])?.first,
                       let cont = cand["content"] as? [String: Any],
                       let partes = cont["parts"] as? [[String: Any]] else { final = "No obtuve respuesta."; break }
@@ -173,9 +183,13 @@ final class Brain: ObservableObject {
                 final = txt
             }
         } catch {
+            Registro.add("ERROR tras \(Int(Date().timeIntervalSince(t0)))s: \(error.localizedDescription)")
+            await Registro.subir()
             return "Error: " + error.localizedDescription
         }
         if final.isEmpty { final = "Hecho." }
+        Registro.add("ok \(String(format: "%.1f", Date().timeIntervalSince(t0)))s, respuesta de \(final.count) letras")
+        Task { await Registro.subir() }
         historial.append(["role": "user", "parts": [["text": (imagen != nil ? "(Sergio enseñó una foto) " : "") + texto]]])
         historial.append(["role": "model", "parts": [["text": final]]])
         if historial.count > 24 { historial.removeFirst(historial.count - 24) }

@@ -138,6 +138,8 @@ struct ContentView: View {
     @State var mostrarCam = false
     @State var camAuto = false
     @State var camPregunta = ""
+    @State var mostrarMapa = false
+    @State var mapaConsulta = ""
     @Environment(\.scenePhase) var fase
 
     var estado: Int { (voz.oyendo || voz.activo) ? 1 : (brain.pensando ? 2 : (voz.hablando ? 3 : 0)) }
@@ -249,6 +251,11 @@ struct ContentView: View {
                             .frame(width: 38, height: 38).background(Circle().fill(CIAN.opacity(0.1)))
                             .overlay(Circle().stroke(CIAN.opacity(0.6), lineWidth: 1.5))
                     }
+                    Button(action: { mapaConsulta = ""; mostrarMapa = true }) {
+                        Image(systemName: "map.fill").font(.system(size: 17)).foregroundColor(CIAN)
+                            .frame(width: 38, height: 38).background(Circle().fill(CIAN.opacity(0.1)))
+                            .overlay(Circle().stroke(CIAN.opacity(0.6), lineWidth: 1.5))
+                    }
                     Button(action: {
                         voz.segundoPlano.toggle()
                         brain.chat.append(Linea(yo: false, texto: voz.segundoPlano ? "Segundo plano activado: sigo escuchando con la pantalla bloqueada." : "Segundo plano desactivado: dejo de escuchar al salir de la app."))
@@ -277,6 +284,12 @@ struct ContentView: View {
         }
         .fullScreenCover(isPresented: $mostrarCam) {
             CamaraSheet(auto: camAuto, onFoto: { d in enviarFoto(d, camPregunta) }, onCerrar: { mostrarCam = false })
+        }
+        .fullScreenCover(isPresented: $mostrarMapa) {
+            MapaHolo(consulta: mapaConsulta, onCerrar: { mostrarMapa = false })
+        }
+        .onChange(of: brain.mapaPedido) { q in
+            if let q = q { mapaConsulta = q; mostrarMapa = true; brain.mapaPedido = nil }
         }
         .onAppear {
             voz.permisos()
