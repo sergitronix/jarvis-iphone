@@ -1,0 +1,20 @@
+{
+ "prompt_extra": "",
+ "sugerencias": [
+  "Pon un vídeo de gatos en YouTube",
+  "Recuérdame en 10 minutos beber agua",
+  "Llévame a casa en Maps"
+ ],
+ "habilidades": [
+  {
+   "nombre": "buscar en google",
+   "descripcion": "Busca algo en Google",
+   "plantilla": "https://www.google.com/search?q={q}"
+  },
+  {
+   "nombre": "traducir",
+   "descripcion": "Traduce un texto al inglés con Google Translate",
+   "plantilla": "https://translate.google.com/?sl=auto&tl=en&text={q}&op=translate"
+  }
+ ]
+}

@@ -150,7 +150,7 @@ struct ContentView: View {
                         VStack(spacing: 10) {
                             if brain.chat.isEmpty {
                                 VStack(spacing: 8) {
-                                    ForEach(["Pon un vídeo de gatos en YouTube", "Recuérdame en 10 minutos beber agua", "Llévame a casa en Maps"], id: \.self) { s in
+                                    ForEach(brain.sugerencias.isEmpty ? ["Pon un vídeo de gatos en YouTube", "Recuérdame en 10 minutos beber agua", "Llévame a casa en Maps"] : brain.sugerencias, id: \.self) { s in
                                         Button(action: { enviar(s) }) {
                                             Text(s).font(.system(size: 13, design: .monospaced)).foregroundColor(CIAN)
                                                 .frame(maxWidth: .infinity).padding(10).overlay(Esquinas(l: 8).stroke(CIAN.opacity(0.7), lineWidth: 1))
@@ -193,6 +193,7 @@ struct ContentView: View {
             voz.permisos()
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
             voz.onFinal = { t in enviar(t) }
+            Task { await brain.actualizarConfig() }
         }
     }
 
